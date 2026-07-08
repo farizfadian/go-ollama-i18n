@@ -12,7 +12,7 @@ import (
 type fakeProvider struct{ seen []string }
 
 func (f *fakeProvider) Name() string { return "fake" }
-func (f *fakeProvider) Translate(_ context.Context, text, lang string) (string, error) {
+func (f *fakeProvider) Translate(_ context.Context, text, sourceLang, targetLang string) (string, error) {
 	f.seen = append(f.seen, text)
 	return "T(" + text + ")", nil
 }
@@ -43,7 +43,7 @@ func TestCacheKeepsExistingAndTranslatesMissing(t *testing.T) {
 	existing := mustLoad(t, `{"common":{"save":"Simpan"}}`)
 	fp := &fakeProvider{}
 
-	out, stats, err := Translate(context.Background(), fp, src, existing, "Indonesian", false, 1)
+	out, stats, err := Translate(context.Background(), fp, src, existing, "English", "Indonesian", false, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,7 +63,7 @@ func TestNoCacheRetranslatesEverything(t *testing.T) {
 	existing := mustLoad(t, `{"save":"Simpan"}`)
 	fp := &fakeProvider{}
 
-	_, stats, err := Translate(context.Background(), fp, src, existing, "Indonesian", true, 1)
+	_, stats, err := Translate(context.Background(), fp, src, existing, "English", "Indonesian", true, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -75,7 +75,7 @@ func TestNoCacheRetranslatesEverything(t *testing.T) {
 func TestPlaceholdersReachProviderIntact(t *testing.T) {
 	src := mustLoad(t, `{"msg":"{field} must be at least {min} characters"}`)
 	fp := &fakeProvider{}
-	if _, _, err := Translate(context.Background(), fp, src, NewOrderedMap(), "French", false, 1); err != nil {
+	if _, _, err := Translate(context.Background(), fp, src, NewOrderedMap(), "English", "French", false, 1); err != nil {
 		t.Fatal(err)
 	}
 	if len(fp.seen) != 1 || !strings.Contains(fp.seen[0], "{field}") || !strings.Contains(fp.seen[0], "{min}") {
@@ -85,7 +85,7 @@ func TestPlaceholdersReachProviderIntact(t *testing.T) {
 
 func TestNonStringValuesCopiedThrough(t *testing.T) {
 	src := mustLoad(t, `{"count":5,"enabled":true,"tags":["a","b"]}`)
-	out, stats, err := Translate(context.Background(), &fakeProvider{}, src, NewOrderedMap(), "German", false, 1)
+	out, stats, err := Translate(context.Background(), &fakeProvider{}, src, NewOrderedMap(), "English", "German", false, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,7 +100,7 @@ func TestNonStringValuesCopiedThrough(t *testing.T) {
 
 func TestConcurrencyKeepsOrderAndCorrectness(t *testing.T) {
 	src := mustLoad(t, `{"a":"A","b":"B","c":"C","d":"D","e":"E"}`)
-	out, _, err := Translate(context.Background(), &fakeProvider{}, src, NewOrderedMap(), "Spanish", false, 8)
+	out, _, err := Translate(context.Background(), &fakeProvider{}, src, NewOrderedMap(), "English", "Spanish", false, 8)
 	if err != nil {
 		t.Fatal(err)
 	}

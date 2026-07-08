@@ -16,12 +16,12 @@ import (
 // Keeping this as an interface means the Ollama implementation below can be
 // swapped for a Claude/OpenAI-backed one without touching the merge logic.
 type Provider interface {
-	Translate(ctx context.Context, text, targetLang string) (string, error)
+	Translate(ctx context.Context, text, sourceLang, targetLang string) (string, error)
 	Name() string
 }
 
-const systemPromptTmpl = `You are a professional software localization engine.
-Translate the user's text into %s.
+const systemPromptTmpl = `You are a professional %s to %s translator specialized in software localization.
+Translate the user's text.
 
 Rules:
 - Output ONLY the translated text. No quotes, no explanations, no notes.
@@ -63,7 +63,7 @@ type ollamaChatResponse struct {
 	Error   string        `json:"error,omitempty"`
 }
 
-func (p *OllamaProvider) Translate(ctx context.Context, text, targetLang string) (string, error) {
+func (p *OllamaProvider) Translate(ctx context.Context, text, sourceLang, targetLang string) (string, error) {
 	// Don't waste a model call on whitespace-only or empty strings.
 	if strings.TrimSpace(text) == "" {
 		return text, nil
@@ -73,7 +73,7 @@ func (p *OllamaProvider) Translate(ctx context.Context, text, targetLang string)
 		Model:  p.Model,
 		Stream: false,
 		Messages: []ollamaMessage{
-			{Role: "system", Content: fmt.Sprintf(systemPromptTmpl, targetLang)},
+			{Role: "system", Content: fmt.Sprintf(systemPromptTmpl, sourceLang, targetLang)},
 			{Role: "user", Content: text},
 		},
 		Options: map[string]any{"temperature": 0},

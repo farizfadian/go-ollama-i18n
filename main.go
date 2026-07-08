@@ -44,8 +44,8 @@ func run(args []string) error {
 	fs.StringVar(&opt.source, "s", "", "shorthand for --source")
 	fs.StringVar(&opt.target, "target", "", "target locale name; if omitted, all other locales in --dir are processed")
 	fs.StringVar(&opt.target, "t", "", "shorthand for --target")
-	fs.StringVar(&opt.model, "model", "llama3.2:3b", "Ollama model to use")
-	fs.StringVar(&opt.model, "m", "llama3.2:3b", "shorthand for --model")
+	fs.StringVar(&opt.model, "model", "translategemma", "Ollama model to use")
+	fs.StringVar(&opt.model, "m", "translategemma", "shorthand for --model")
 	fs.StringVar(&opt.host, "host", defaultHost(), "Ollama base URL")
 	fs.IntVar(&opt.concurrency, "concurrency", 4, "number of concurrent translation requests")
 	fs.DurationVar(&opt.timeout, "timeout", 120*time.Second, "per-request timeout")
@@ -86,6 +86,7 @@ func run(args []string) error {
 		provider = dryRunProvider{}
 	}
 	ctx := context.Background()
+	srcLang := languageName(opt.source)
 
 	for _, name := range targets {
 		path := filepath.Join(opt.dir, name+".json")
@@ -95,7 +96,7 @@ func run(args []string) error {
 		}
 
 		lang := languageName(name)
-		out, stats, err := Translate(ctx, provider, src, existing, lang, opt.noCache, opt.concurrency)
+		out, stats, err := Translate(ctx, provider, src, existing, srcLang, lang, opt.noCache, opt.concurrency)
 		if err != nil {
 			return fmt.Errorf("translating %s: %w", name, err)
 		}
@@ -184,6 +185,6 @@ func writeLocale(path string, m *OrderedMap) error {
 type dryRunProvider struct{}
 
 func (dryRunProvider) Name() string { return "dry-run" }
-func (dryRunProvider) Translate(_ context.Context, text, lang string) (string, error) {
-	return fmt.Sprintf("[%s] %s", lang, text), nil
+func (dryRunProvider) Translate(_ context.Context, text, sourceLang, targetLang string) (string, error) {
+	return fmt.Sprintf("[%s] %s", targetLang, text), nil
 }

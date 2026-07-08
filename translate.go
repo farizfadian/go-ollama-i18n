@@ -143,7 +143,7 @@ func buildTree(src, existing *OrderedMap, noCache bool, jobs *[]job, stats *Stat
 
 // Translate builds the merged tree for one target locale and runs all pending
 // translation jobs with bounded concurrency.
-func Translate(ctx context.Context, p Provider, src, existing *OrderedMap, targetLang string, noCache bool, concurrency int) (*OrderedMap, Stats, error) {
+func Translate(ctx context.Context, p Provider, src, existing *OrderedMap, sourceLang, targetLang string, noCache bool, concurrency int) (*OrderedMap, Stats, error) {
 	var stats Stats
 	var jobs []job
 	out := buildTree(src, existing, noCache, &jobs, &stats)
@@ -165,7 +165,7 @@ func Translate(ctx context.Context, p Provider, src, existing *OrderedMap, targe
 		go func() {
 			defer wg.Done()
 			for i := range indices {
-				out, err := p.Translate(ctx, jobs[i].text, targetLang)
+				out, err := p.Translate(ctx, jobs[i].text, sourceLang, targetLang)
 				results[i], errs[i] = out, err
 			}
 		}()

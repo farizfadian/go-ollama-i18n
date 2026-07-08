@@ -22,8 +22,15 @@ translated. No API keys, no per-token cost, runs offline.
 ## Prerequisites
 
 - Go 1.22+ (to build)
-- [Ollama](https://ollama.com) running locally with a model pulled, e.g.
-  `ollama pull llama3.2:3b`
+- [Ollama](https://ollama.com) running locally with a model pulled. The default
+  is [TranslateGemma](https://ollama.com/library/translategemma), a Gemma 3
+  model built specifically for translation (55 languages):
+
+  ```bash
+  ollama pull translategemma
+  ```
+
+  Any Ollama model works via `--model` (e.g. `llama3.2:3b`, `mistral`).
 - A directory of locale JSON files
 
 ## Build & install
@@ -66,13 +73,17 @@ ollama-i18n -s en -d ./locales --dry-run
 | `-d, --dir`          | —                        | Directory containing locale files (required)                       |
 | `-s, --source`       | —                        | Source locale name without extension, e.g. `en` (required)         |
 | `-t, --target`       | —                        | Target locale; if omitted, all other locales in `--dir` are done   |
-| `-m, --model`        | `llama3.2:3b`            | Ollama model to use                                                |
+| `-m, --model`        | `translategemma`         | Ollama model to use                                                |
 | `--host`             | `http://localhost:11434` | Ollama base URL (or set `OLLAMA_HOST`)                             |
 | `--concurrency`      | `4`                      | Concurrent translation requests                                    |
 | `--timeout`          | `120s`                   | Per-request timeout                                                |
 | `--no-cache`         | `false`                  | Retranslate every key, ignoring existing translations             |
 | `--dry-run`          | `false`                  | Report changes without calling Ollama or writing files            |
 | `-v, --version`      | —                        | Print version                                                      |
+
+The source language (from `--source`) is passed to the model along with the
+target, since TranslateGemma is tuned for an explicit "{source} to {target}"
+prompt. This is harmless for general-purpose models.
 
 ## Locale file structure
 
@@ -108,14 +119,15 @@ git add locales/*.json
 
 ## Notes & limitations
 
+- **Model must be pulled first.** `translategemma` defaults to the 4B variant
+  (~3.3 GB). Larger `translategemma:12b` / `:27b` exist if you have the VRAM.
 - **Ollama concurrency:** `--concurrency` only speeds things up if your Ollama
   is configured to serve parallel requests (`OLLAMA_NUM_PARALLEL`). Against a
   single-slot instance the requests just queue — no harm, no speedup.
 - **Arrays / numbers / booleans** are copied through unchanged, not translated.
-  (Translating array string elements is a deliberate non-goal for v1.)
-- **Small models drift.** 3–7B models are good at short UI strings but will
-  occasionally over-translate or add quotes; output is trimmed of wrapping
-  quotes, but review diffs before committing.
+- **Verify placeholders.** Translation-specialized models can occasionally
+  reformat or drop placeholders like `{field}`. The prompt instructs the model
+  to keep them, but review diffs before committing — especially on a new model.
 - Empty source files are valid (treated as an empty locale).
 
 ## Layout
@@ -127,6 +139,10 @@ translate.go   merge/cache/walk logic + bounded concurrency
 main.go        CLI: flags, file discovery, orchestration
 main_test.go   tests (ordering, cache, placeholders, concurrency)
 ```
+
+## Credits
+
+Port of [`fkapsahili/ollama-i18n`](https://github.com/fkapsahili/ollama-i18n).
 
 ## License
 
