@@ -6,22 +6,71 @@ import (
 	"sync"
 )
 
-// languageNames maps common locale codes to human-readable names that read
-// better in the model prompt than a bare code. Region suffixes (en-US) are
-// stripped before lookup; unknown codes fall back to the raw string.
+// languageNames maps locale codes to human-readable names that read better in
+// the model prompt than a bare code. Lookup tries the full normalized tag first
+// (so "pt-BR" -> "Brazilian Portuguese"), then falls back to the base language
+// subtag ("pt" -> "Portuguese"), and finally returns the raw code if unknown.
 var languageNames = map[string]string{
-	"en": "English", "id": "Indonesian", "ms": "Malay", "fr": "French",
-	"de": "German", "es": "Spanish", "pt": "Portuguese", "it": "Italian",
-	"nl": "Dutch", "ja": "Japanese", "ko": "Korean", "zh": "Chinese",
-	"th": "Thai", "vi": "Vietnamese", "ru": "Russian", "ar": "Arabic",
-	"hi": "Hindi", "tr": "Turkish", "pl": "Polish", "sv": "Swedish",
-	"da": "Danish", "fi": "Finnish", "no": "Norwegian", "cs": "Czech",
-	"uk": "Ukrainian", "ro": "Romanian", "hu": "Hungarian", "el": "Greek",
+	// Base ISO 639-1 language subtags.
+	"af": "Afrikaans", "sq": "Albanian", "am": "Amharic", "ar": "Arabic",
+	"hy": "Armenian", "as": "Assamese", "az": "Azerbaijani", "eu": "Basque",
+	"be": "Belarusian", "bn": "Bengali", "bs": "Bosnian", "bg": "Bulgarian",
+	"my": "Burmese", "ca": "Catalan", "ceb": "Cebuano", "zh": "Chinese",
+	"co": "Corsican", "hr": "Croatian", "cs": "Czech", "da": "Danish",
+	"nl": "Dutch", "en": "English", "eo": "Esperanto", "et": "Estonian",
+	"fil": "Filipino", "fi": "Finnish", "fr": "French", "fy": "Frisian",
+	"gl": "Galician", "ka": "Georgian", "de": "German", "el": "Greek",
+	"gu": "Gujarati", "ht": "Haitian Creole", "ha": "Hausa", "haw": "Hawaiian",
+	"he": "Hebrew", "iw": "Hebrew", "hi": "Hindi", "hmn": "Hmong",
+	"hu": "Hungarian", "is": "Icelandic", "ig": "Igbo", "id": "Indonesian",
+	"ga": "Irish", "it": "Italian", "ja": "Japanese", "jv": "Javanese",
+	"kn": "Kannada", "kk": "Kazakh", "km": "Khmer", "rw": "Kinyarwanda",
+	"ko": "Korean", "ku": "Kurdish", "ky": "Kyrgyz", "lo": "Lao",
+	"la": "Latin", "lv": "Latvian", "lt": "Lithuanian", "lb": "Luxembourgish",
+	"mk": "Macedonian", "mg": "Malagasy", "ms": "Malay", "ml": "Malayalam",
+	"mt": "Maltese", "mi": "Maori", "mr": "Marathi", "mn": "Mongolian",
+	"ne": "Nepali", "no": "Norwegian", "nb": "Norwegian Bokmal",
+	"nn": "Norwegian Nynorsk", "ny": "Nyanja", "or": "Odia", "ps": "Pashto",
+	"fa": "Persian", "pl": "Polish", "pt": "Portuguese", "pa": "Punjabi",
+	"ro": "Romanian", "ru": "Russian", "sm": "Samoan", "gd": "Scottish Gaelic",
+	"sr": "Serbian", "st": "Sesotho", "sn": "Shona", "sd": "Sindhi",
+	"si": "Sinhala", "sk": "Slovak", "sl": "Slovenian", "so": "Somali",
+	"es": "Spanish", "su": "Sundanese", "sw": "Swahili", "sv": "Swedish",
+	"tg": "Tajik", "ta": "Tamil", "tt": "Tatar", "te": "Telugu",
+	"th": "Thai", "tl": "Tagalog", "tr": "Turkish", "tk": "Turkmen",
+	"uk": "Ukrainian", "ur": "Urdu", "ug": "Uyghur", "uz": "Uzbek",
+	"vi": "Vietnamese", "cy": "Welsh", "xh": "Xhosa", "yi": "Yiddish",
+	"yo": "Yoruba", "zu": "Zulu",
+
+	// Common region/script variants worth distinguishing for translation.
+	"pt-br":   "Brazilian Portuguese",
+	"pt-pt":   "European Portuguese",
+	"zh-hans": "Simplified Chinese",
+	"zh-hant": "Traditional Chinese",
+	"zh-cn":   "Simplified Chinese",
+	"zh-sg":   "Simplified Chinese",
+	"zh-tw":   "Traditional Chinese",
+	"zh-hk":   "Traditional Chinese (Hong Kong)",
+	"en-gb":   "British English",
+	"en-us":   "American English",
+	"en-au":   "Australian English",
+	"es-419":  "Latin American Spanish",
+	"es-mx":   "Mexican Spanish",
+	"es-es":   "European Spanish",
+	"fr-ca":   "Canadian French",
+	"fr-fr":   "European French",
 }
 
+// languageName resolves a locale code to a human-readable language name.
 func languageName(code string) string {
-	base := strings.ToLower(code)
-	if i := strings.IndexAny(base, "-_"); i >= 0 {
+	norm := strings.ToLower(strings.ReplaceAll(code, "_", "-"))
+	// Try the full tag first so region/script variants win (e.g. "pt-br").
+	if name, ok := languageNames[norm]; ok {
+		return name
+	}
+	// Fall back to the base language subtag (e.g. "pt-br" -> "pt").
+	base := norm
+	if i := strings.IndexByte(base, '-'); i >= 0 {
 		base = base[:i]
 	}
 	if name, ok := languageNames[base]; ok {
