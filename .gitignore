@@ -1,0 +1,21 @@
+# Compiled binaries
+/ollama-i18n
+/go-ollama-i18n
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary and coverage output
+*.test
+*.out
+
+# Go workspace files
+go.work
+go.work.sum
+
+# Editor / OS cruft
+.DS_Store
+.idea/
+.vscode/
