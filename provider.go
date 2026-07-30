@@ -11,7 +11,8 @@ import (
 	"time"
 )
 
-// Provider translates a single short string into the target language.
+// Provider translates a single short string from the source language into the
+// target language.
 //
 // Keeping this as an interface means the Ollama implementation below can be
 // swapped for a Claude/OpenAI-backed one without touching the merge logic.
@@ -25,7 +26,7 @@ Translate the user's text.
 
 Rules:
 - Output ONLY the translated text. No quotes, no explanations, no notes.
-- Preserve every placeholder exactly as-is: {name}, {{count}}, %%s, %%d, :id, <0>, </0>.
+- Keep any [[0]], [[1]] style markers exactly as they appear, in their original positions.
 - Preserve leading/trailing whitespace, punctuation, and capitalization style.
 - Do not translate brand names, code, or HTML tags.
 - If the text is already in the target language, return it unchanged.`
@@ -69,12 +70,18 @@ func (p *OllamaProvider) Translate(ctx context.Context, text, sourceLang, target
 		return text, nil
 	}
 
+	// Translation-tuned models (translategemma especially) translate the words
+	// *inside* {placeholders} — {field} becomes {bidang} — which silently
+	// breaks runtime interpolation. Mask placeholders with neutral [[n]]
+	// markers before sending, then restore them afterwards (see placeholder.go).
+	masked, originals := maskPlaceholders(text)
+
 	reqBody := ollamaChatRequest{
 		Model:  p.Model,
 		Stream: false,
 		Messages: []ollamaMessage{
 			{Role: "system", Content: fmt.Sprintf(systemPromptTmpl, sourceLang, targetLang)},
-			{Role: "user", Content: text},
+			{Role: "user", Content: masked},
 		},
 		Options: map[string]any{"temperature": 0},
 	}
@@ -97,7 +104,11 @@ func (p *OllamaProvider) Translate(ctx context.Context, text, sourceLang, target
 
 	body, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("ollama returned %s: %s", resp.Status, strings.TrimSpace(string(body)))
+		msg := strings.TrimSpace(string(body))
+		if resp.StatusCode == http.StatusNotFound || strings.Contains(strings.ToLower(msg), "not found") {
+			return "", fmt.Errorf("model %q is not available in Ollama — run: ollama pull %s", p.Model, p.Model)
+		}
+		return "", fmt.Errorf("ollama returned %s: %s", resp.Status, msg)
 	}
 
 	var out ollamaChatResponse
@@ -105,9 +116,13 @@ func (p *OllamaProvider) Translate(ctx context.Context, text, sourceLang, target
 		return "", fmt.Errorf("decoding ollama response: %w", err)
 	}
 	if out.Error != "" {
+		if strings.Contains(strings.ToLower(out.Error), "not found") {
+			return "", fmt.Errorf("model %q is not available in Ollama — run: ollama pull %s", p.Model, p.Model)
+		}
 		return "", fmt.Errorf("ollama error: %s", out.Error)
 	}
-	return cleanTranslation(out.Message.Content), nil
+
+	return restorePlaceholders(cleanTranslation(out.Message.Content), originals), nil
 }
 
 // cleanTranslation strips wrapping quotes and stray whitespace that small
