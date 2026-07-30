@@ -1,0 +1,13 @@
+# Normalize every text file to LF inside the repository.
+* text=auto eol=lf
+
+# gofmt treats CRLF as unformatted, so .go files must never be checked out as
+# CRLF -- otherwise `gofmt -l .` flags the whole tree on Windows clones where
+# core.autocrlf=true.
+*.go   text eol=lf
+*.md   text eol=lf
+*.yml  text eol=lf
+*.json text eol=lf
+
+# Never touch line endings in binaries.
+*.exe binary
