@@ -66,6 +66,31 @@ Preview what would change without calling Ollama or writing files:
 ollama-i18n -s en -d ./locales --dry-run
 ```
 
+### Trying it safely on a real project
+
+The tool rewrites locale files in place, so let git be the safety net:
+
+```bash
+git status                                  # commit or stash locale changes first
+ollama-i18n -s en -d ./locales --dry-run    # see the scope before any model call
+ollama-i18n -s en -d ./locales              # run for real
+git diff ./locales                          # review before committing
+```
+
+Each line of output ends with a count worth reading:
+
+```
+id      → Indonesian           wrote  (translated 8, kept 0, copied 2)
+```
+
+- `translated` — strings sent to the model this run
+- `kept` — existing translations left untouched (the cache working)
+- `copied` — non-string values (numbers, booleans, arrays) passed through
+
+Running the same command twice should report `translated 0` the second time.
+If it doesn't, something is defeating the cache — check that the target file
+really has non-empty strings for those keys.
+
 ## Options
 
 | Flag                 | Default                  | Description                                                        |
@@ -104,8 +129,12 @@ locales/
 }
 ```
 
-Placeholders like `{field}`, `{{count}}`, `%s`, `:id` are preserved — the model
-is instructed to leave them untouched.
+Placeholders like `{field}`, `{{count}}`, `%s`, `{0}`, and `<0>` tags are
+masked as neutral `[[n]]` markers before translation and restored afterwards,
+so the model never translates the text inside them.
+
+Output is written with HTML escaping disabled, so markup stays readable in the
+file (`"Click <0>here</0>"`, not `"Click \u003c0\u003ehere"`).
 
 ## Pre-commit hook
 
@@ -125,19 +154,38 @@ git add locales/*.json
   is configured to serve parallel requests (`OLLAMA_NUM_PARALLEL`). Against a
   single-slot instance the requests just queue — no harm, no speedup.
 - **Arrays / numbers / booleans** are copied through unchanged, not translated.
-- **Verify placeholders.** Translation-specialized models can occasionally
-  reformat or drop placeholders like `{field}`. The prompt instructs the model
-  to keep them, but review diffs before committing — especially on a new model.
+- **Placeholder masking.** Translation-tuned models like TranslateGemma will
+  otherwise translate the words inside `{field}` (turning it into `{bidang}`).
+  The tool masks placeholders as neutral `[[0]]` markers before sending and
+  restores them afterwards, which survives translation reliably. Still worth a
+  quick diff review on a new model, in case one drops a marker.
 - Empty source files are valid (treated as an empty locale).
+
+## Development
+
+```bash
+go test ./...          # unit tests (no Ollama required — they use a fake provider)
+go vet ./...
+gofmt -l .             # should print nothing
+```
+
+The tests cover key ordering, the translation cache, placeholder masking,
+BOM handling, HTML-escape-free output, and concurrent merges. None of them
+call Ollama, so they run in milliseconds.
 
 ## Layout
 
 ```
-ordered.go     order-preserving JSON object (load/save)
-provider.go    Provider interface + Ollama client
-translate.go   merge/cache/walk logic + bounded concurrency
-main.go        CLI: flags, file discovery, orchestration
-main_test.go   tests (ordering, cache, placeholders, concurrency)
+ordered.go       order-preserving JSON object + escape-free marshaling
+provider.go      Provider interface + Ollama client
+placeholder.go   mask/restore of {placeholders} as [[n]] markers
+translate.go     language names + merge/cache/walk logic + bounded concurrency
+main.go          CLI: flags, file discovery, orchestration, locale read/write
+
+main_test.go         ordering, cache, placeholders reaching the provider, concurrency
+placeholder_test.go  mask/restore round trips
+loadlocale_test.go   BOM stripping, escape-free output, write/load round trip
+lang_test.go         locale code → language name resolution
 ```
 
 ## Credits
