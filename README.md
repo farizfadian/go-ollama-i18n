@@ -33,12 +33,31 @@ translated. No API keys, no per-token cost, runs offline.
   Any Ollama model works via `--model` (e.g. `llama3.2:3b`, `mistral`).
 - A directory of locale JSON files
 
-## Build & install
+## Install
+
+Download a prebuilt binary from the
+[Releases](https://github.com/farizfadian/go-ollama-i18n/releases) page — no Go
+toolchain needed. Builds are published for Windows, Linux and macOS on both
+x86-64 and arm64, with a `checksums.txt` to verify them.
+
+```bash
+# macOS / Linux: make it executable and put it on your PATH
+chmod +x go-ollama-i18n-linux-amd64
+sudo mv go-ollama-i18n-linux-amd64 /usr/local/bin/ollama-i18n
+```
+
+On Windows, rename `go-ollama-i18n-windows-amd64.exe` to `ollama-i18n.exe` and
+put it anywhere on your `PATH`.
+
+Or build it yourself:
 
 ```bash
 go build -o ollama-i18n .
 # optionally: go install github.com/farizfadian/go-ollama-i18n@latest
 ```
+
+`ollama-i18n --version` reports the release tag it was built from (`dev` for
+local builds).
 
 ## Usage
 

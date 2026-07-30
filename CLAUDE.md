@@ -97,6 +97,28 @@ with `EF BB BF`, which makes `json.Unmarshal` fail with
 for an explicit "{source} to {target}" instruction, so the source language is
 passed through from `--source`. Harmless for general-purpose models.
 
+### 6. `version` must stay a `var`, not a `const`
+
+`main.go` declares `var version = "dev"`. The release workflow injects the tag
+with `-ldflags "-X main.version=$GITHUB_REF_NAME"`, and the linker's `-X` flag
+cannot patch a `const` — it fails silently, so every release would report
+`dev`. Do not "tidy" this into a const.
+
+## Releasing
+
+`.github/workflows/release.yml` triggers on tags matching `v*`. It runs gofmt /
+vet / tests first, then cross-compiles for windows, linux and darwin on amd64
+and arm64, generates `checksums.txt`, and publishes a GitHub Release with
+auto-generated notes.
+
+```bash
+git tag v0.2.0
+git push origin v0.2.0
+```
+
+There is no separate CI workflow for ordinary pushes yet; tests currently run
+as part of the release job only.
+
 ## Architecture
 
 ```
@@ -120,6 +142,11 @@ requests (`OLLAMA_NUM_PARALLEL`); otherwise requests just queue.
 
 ## Conventions
 
+- `.gitattributes` pins every text file to LF. On Windows clones with
+  `core.autocrlf=true`, git would otherwise check out `.go` files as CRLF and
+  `gofmt -l .` would flag the entire tree — including the release workflow's
+  formatting gate. If you ever see a clean tree fail gofmt, check
+  `git ls-files --eol` before touching the source.
 - Comments explain *why*, especially around the constraints above. The empirical
   findings are the valuable part; don't strip them as "noise".
 - Locale files are rewritten in place, so the tool assumes the user has git as a

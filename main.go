@@ -13,7 +13,9 @@ import (
 	"time"
 )
 
-const version = "0.1.0"
+// version is overridden at build time via -ldflags "-X main.version=<tag>".
+// It must stay a var: the linker's -X flag cannot patch a const.
+var version = "dev"
 
 type options struct {
 	dir         string
