@@ -107,6 +107,21 @@ func parseValue(dec *json.Decoder) (any, error) {
 	}
 }
 
+// marshalNoEscapeHTML marshals v without escaping <, > and & into \u003c-style
+// sequences. encoding/json escapes them by default, which is valid JSON but
+// mangles i18n strings containing markup (i18next <Trans> tags, "Terms & Co")
+// into something reviewers can't read in a diff.
+func marshalNoEscapeHTML(v any) ([]byte, error) {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(v); err != nil {
+		return nil, err
+	}
+	// Encode appends a newline; callers are splicing this into a larger document.
+	return bytes.TrimRight(buf.Bytes(), "\n"), nil
+}
+
 func (m *OrderedMap) MarshalJSON() ([]byte, error) {
 	var buf bytes.Buffer
 	buf.WriteByte('{')
@@ -114,13 +129,13 @@ func (m *OrderedMap) MarshalJSON() ([]byte, error) {
 		if i > 0 {
 			buf.WriteByte(',')
 		}
-		kb, err := json.Marshal(k)
+		kb, err := marshalNoEscapeHTML(k)
 		if err != nil {
 			return nil, err
 		}
 		buf.Write(kb)
 		buf.WriteByte(':')
-		vb, err := json.Marshal(m.values[k])
+		vb, err := marshalNoEscapeHTML(m.values[k])
 		if err != nil {
 			return nil, err
 		}

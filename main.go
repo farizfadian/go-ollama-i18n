@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -151,6 +152,7 @@ func loadLocale(path string) (*OrderedMap, error) {
 	if err != nil {
 		return nil, err
 	}
+	data = bytes.TrimPrefix(data, []byte("\xef\xbb\xbf")) // tolerate a UTF-8 BOM
 	m := NewOrderedMap()
 	if len(strings.TrimSpace(string(data))) == 0 {
 		return m, nil // empty file is a valid empty locale
@@ -172,12 +174,14 @@ func loadLocaleOrEmpty(path string) (*OrderedMap, error) {
 }
 
 func writeLocale(path string, m *OrderedMap) error {
-	data, err := json.MarshalIndent(m, "", "  ")
-	if err != nil {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false) // keep <0>, </0> and & readable in the file
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(m); err != nil { // Encode appends the trailing newline
 		return err
 	}
-	data = append(data, '\n')
-	return os.WriteFile(path, data, 0o644)
+	return os.WriteFile(path, buf.Bytes(), 0o644)
 }
 
 // dryRunProvider echoes a marker instead of calling Ollama, so users can verify
