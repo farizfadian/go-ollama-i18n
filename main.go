@@ -110,8 +110,18 @@ func run(args []string) error {
 		} else if err := writeLocale(path, out); err != nil {
 			return fmt.Errorf("writing %s: %w", path, err)
 		}
-		fmt.Printf("%-7s %-22s %s  (translated %d, kept %d, copied %d)\n",
-			name, "→ "+lang, action, stats.Translated, stats.Kept, stats.Copied)
+		note := ""
+		if stats.Skipped > 0 {
+			// Surfaced rather than swallowed: these keys are still in the source
+			// language, and the user should know which run left them that way.
+			word := "replies"
+			if stats.Skipped == 1 {
+				word = "reply"
+			}
+			note = fmt.Sprintf(", %d unusable %s", stats.Skipped, word)
+		}
+		fmt.Printf("%-7s %-22s %s  (translated %d, kept %d, copied %d%s)\n",
+			name, "→ "+lang, action, stats.Translated, stats.Kept, stats.Copied, note)
 	}
 	return nil
 }
@@ -191,6 +201,6 @@ func writeLocale(path string, m *OrderedMap) error {
 type dryRunProvider struct{}
 
 func (dryRunProvider) Name() string { return "dry-run" }
-func (dryRunProvider) Translate(_ context.Context, text, sourceLang, targetLang string) (string, error) {
-	return fmt.Sprintf("[%s] %s", targetLang, text), nil
+func (dryRunProvider) Translate(_ context.Context, req Request) (string, error) {
+	return fmt.Sprintf("[%s] %s", req.Target, req.Text), nil
 }

@@ -148,9 +148,11 @@ locales/
 }
 ```
 
-Placeholders like `{field}`, `{{count}}`, `%s`, `{0}`, and `<0>` tags are
-masked as neutral `[[n]]` markers before translation and restored afterwards,
-so the model never translates the text inside them.
+Placeholders like `{field}`, `{{count}}`, `%s`, `{0}`, HTML tags with their
+attributes (`<span class="text-muted">`), and literal elements together with
+their contents (`<code>Name: value</code>`) are masked as neutral `[[n]]`
+markers before translation and restored afterwards, so the model never
+translates the text inside them.
 
 Output is written with HTML escaping disabled, so markup stays readable in the
 file (`"Click <0>here</0>"`, not `"Click \u003c0\u003ehere"`).
@@ -173,11 +175,29 @@ git add locales/*.json
   is configured to serve parallel requests (`OLLAMA_NUM_PARALLEL`). Against a
   single-slot instance the requests just queue — no harm, no speedup.
 - **Arrays / numbers / booleans** are copied through unchanged, not translated.
-- **Placeholder masking.** Translation-tuned models like TranslateGemma will
-  otherwise translate the words inside `{field}` (turning it into `{bidang}`).
-  The tool masks placeholders as neutral `[[0]]` markers before sending and
-  restores them afterwards, which survives translation reliably. Still worth a
-  quick diff review on a new model, in case one drops a marker.
+- **Placeholder and markup masking.** Translation-tuned models like
+  TranslateGemma will otherwise translate the words inside `{field}` (turning it
+  into `{bidang}`) and inside HTML attributes (`class="text-muted"` becoming
+  `class="texto-apagado"`, which stops matching the stylesheet). The tool masks
+  both as neutral `[[0]]` markers before sending and restores them afterwards. A
+  reply that drops or invents a marker is rejected rather than written out.
+- **Unusable replies are skipped, not written.** Given a bare imperative
+  ("Preserve original filename") or a language name ("Polish"), a small model
+  sometimes answers the prompt instead of translating it, replying with its own
+  instructions. Such a reply is retried once with a blunter prompt; if it still
+  looks wrong the source string is kept and the run reports
+  `1 unusable reply`. An untranslated label is a small problem — a locale file
+  containing "Rules: output only the translation" is a much larger one.
+- **The key is sent as context.** The provider receives the full dotted path
+  (`aichat_page.polish`, not the leaf `polish`), which helps a model pick the
+  right sense of an ambiguous word. It is a hint, not a guarantee:
+  `translategemma` still reads "Polish" as the language. Genuinely ambiguous
+  single words are worth checking by hand whatever the model.
+- **Model choice.** `translategemma` (the default) measured better than
+  instruction-tuned general models on short UI labels: `qwen2.5:7b` produced
+  *"Siga los redirecciones"* (wrong gender) and *"Collapsa todo"* (not a Spanish
+  word) where TranslateGemma got both right. General models do hold protocol
+  terms like `Keep-alive` steady more often, so a glossary pass still pays.
 - Empty source files are valid (treated as an empty locale).
 
 ## Development
@@ -197,12 +217,13 @@ call Ollama, so they run in milliseconds.
 ```
 ordered.go       order-preserving JSON object + escape-free marshaling
 provider.go      Provider interface + Ollama client
-placeholder.go   mask/restore of {placeholders} as [[n]] markers
+placeholder.go   mask/restore of {placeholders}, HTML tags and literal elements
 translate.go     language names + merge/cache/walk logic + bounded concurrency
 main.go          CLI: flags, file discovery, orchestration, locale read/write
 
 main_test.go         ordering, cache, placeholders reaching the provider, concurrency
 placeholder_test.go  mask/restore round trips
+leak_test.go         markup masking, leak detection, keeping the source on a bad reply
 loadlocale_test.go   BOM stripping, escape-free output, write/load round trip
 lang_test.go         locale code → language name resolution
 ```

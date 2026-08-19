@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"sync"
 )
@@ -83,19 +84,37 @@ type Stats struct {
 	Translated int // strings sent to the provider
 	Kept       int // existing translations preserved (cache hit)
 	Copied     int // non-string values copied through unchanged
+	Skipped    int // model answered the prompt instead of translating; source kept
 }
 
 // job records one string that needs translating, plus where to write it back.
 type job struct {
 	target *OrderedMap
-	key    string
+	key    string // leaf key, used to write the result back
+	path   string // full dotted path, sent to the provider as context
 	text   string
+}
+
+// joinKey builds a dotted path, tolerating the empty root prefix.
+func joinKey(prefix, key string) string {
+	if prefix == "" {
+		return key
+	}
+	return prefix + "." + key
 }
 
 // buildTree produces the output object in source order. Existing non-empty
 // string translations are kept unless noCache is set; everything else is
 // queued for translation. Returned jobs are filled in by the caller.
 func buildTree(src, existing *OrderedMap, noCache bool, jobs *[]job, stats *Stats) *OrderedMap {
+	return buildTreeAt("", src, existing, noCache, jobs, stats)
+}
+
+// buildTreeAt carries the dotted path of the node it is building. The path is
+// the only context a model gets for an ambiguous label: the leaf key "polish"
+// says nothing, while "aichat_page.polish" says it is the verb on a chat page
+// rather than the language.
+func buildTreeAt(prefix string, src, existing *OrderedMap, noCache bool, jobs *[]job, stats *Stats) *OrderedMap {
 	out := NewOrderedMap()
 	for _, key := range src.Keys() {
 		srcVal, _ := src.Get(key)
@@ -110,7 +129,7 @@ func buildTree(src, existing *OrderedMap, noCache bool, jobs *[]job, stats *Stat
 					}
 				}
 			}
-			out.Set(key, buildTree(v, existingSub, noCache, jobs, stats))
+			out.Set(key, buildTreeAt(joinKey(prefix, key), v, existingSub, noCache, jobs, stats))
 
 		case string:
 			if !noCache && existing != nil {
@@ -123,7 +142,7 @@ func buildTree(src, existing *OrderedMap, noCache bool, jobs *[]job, stats *Stat
 				}
 			}
 			out.Set(key, "") // placeholder fixes ordering before async fill
-			*jobs = append(*jobs, job{target: out, key: key, text: v})
+			*jobs = append(*jobs, job{target: out, key: key, path: joinKey(prefix, key), text: v})
 			stats.Translated++
 
 		default:
@@ -165,7 +184,12 @@ func Translate(ctx context.Context, p Provider, src, existing *OrderedMap, sourc
 		go func() {
 			defer wg.Done()
 			for i := range indices {
-				out, err := p.Translate(ctx, jobs[i].text, sourceLang, targetLang)
+				out, err := p.Translate(ctx, Request{
+					Text:   jobs[i].text,
+					Key:    jobs[i].path,
+					Source: sourceLang,
+					Target: targetLang,
+				})
 				results[i], errs[i] = out, err
 			}
 		}()
@@ -177,7 +201,18 @@ func Translate(ctx context.Context, p Provider, src, existing *OrderedMap, sourc
 	wg.Wait()
 
 	// Write results back sequentially to avoid concurrent map writes.
+	//
+	// A leak is not fatal. Aborting the whole run because one label confused the
+	// model would throw away every good translation alongside it; keeping the
+	// source string leaves that one key in the source language, which is exactly
+	// what an untranslated key already does.
 	for i, jb := range jobs {
+		if errors.Is(errs[i], ErrLeaked) {
+			stats.Skipped++
+			stats.Translated--
+			jb.target.Set(jb.key, jb.text)
+			continue
+		}
 		if errs[i] != nil {
 			return out, stats, errs[i]
 		}

@@ -9,12 +9,16 @@ import (
 
 // fakeProvider records what it was asked to translate and returns a
 // deterministic, placeholder-preserving output.
-type fakeProvider struct{ seen []string }
+type fakeProvider struct {
+	seen []string
+	keys []string
+}
 
 func (f *fakeProvider) Name() string { return "fake" }
-func (f *fakeProvider) Translate(_ context.Context, text, sourceLang, targetLang string) (string, error) {
-	f.seen = append(f.seen, text)
-	return "T(" + text + ")", nil
+func (f *fakeProvider) Translate(_ context.Context, req Request) (string, error) {
+	f.seen = append(f.seen, req.Text)
+	f.keys = append(f.keys, req.Key)
+	return "T(" + req.Text + ")", nil
 }
 
 func mustLoad(t *testing.T, s string) *OrderedMap {
