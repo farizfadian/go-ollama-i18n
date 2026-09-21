@@ -84,7 +84,7 @@ type Stats struct {
 	Translated int // strings sent to the provider
 	Kept       int // existing translations preserved (cache hit)
 	Copied     int // non-string values copied through unchanged
-	Skipped    int // model answered the prompt instead of translating; source kept
+	Skipped    int // model answered the prompt instead of translating; key left out for the next run
 }
 
 // job records one string that needs translating, plus where to write it back.
@@ -203,14 +203,17 @@ func Translate(ctx context.Context, p Provider, src, existing *OrderedMap, sourc
 	// Write results back sequentially to avoid concurrent map writes.
 	//
 	// A leak is not fatal. Aborting the whole run because one label confused the
-	// model would throw away every good translation alongside it; keeping the
-	// source string leaves that one key in the source language, which is exactly
-	// what an untranslated key already does.
+	// model would throw away every good translation alongside it. Nor is the
+	// source string written in its place: to the next run that is a translation
+	// to keep, to a parity check it is a filled key, and to a reader it is the
+	// wrong language for good. The key is left out instead, so it stays a gap —
+	// the app falls back as it does for any untranslated key, and the next run
+	// tries again.
 	for i, jb := range jobs {
 		if errors.Is(errs[i], ErrLeaked) {
 			stats.Skipped++
 			stats.Translated--
-			jb.target.Set(jb.key, jb.text)
+			jb.target.Delete(jb.key)
 			continue
 		}
 		if errs[i] != nil {

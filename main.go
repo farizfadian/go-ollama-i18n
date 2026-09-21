@@ -112,8 +112,8 @@ func run(args []string) error {
 		}
 		note := ""
 		if stats.Skipped > 0 {
-			// Surfaced rather than swallowed: these keys are still in the source
-			// language, and the user should know which run left them that way.
+			// Surfaced rather than swallowed: these keys were left out of the file
+			// and will be tried again next run; the user should know which ones.
 			word := "replies"
 			if stats.Skipped == 1 {
 				word = "reply"

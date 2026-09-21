@@ -34,6 +34,21 @@ func (m *OrderedMap) Set(key string, value any) {
 	m.values[key] = value
 }
 
+// Delete removes a key and its place in the order, so a key a run could not
+// translate is absent from the written file rather than present and wrong.
+func (m *OrderedMap) Delete(key string) {
+	if _, exists := m.values[key]; !exists {
+		return
+	}
+	delete(m.values, key)
+	for i, k := range m.keys {
+		if k == key {
+			m.keys = append(m.keys[:i], m.keys[i+1:]...)
+			break
+		}
+	}
+}
+
 func (m *OrderedMap) Keys() []string { return m.keys }
 
 func (m *OrderedMap) UnmarshalJSON(b []byte) error {

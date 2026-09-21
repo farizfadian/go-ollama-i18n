@@ -110,7 +110,7 @@ func (p leakyProvider) Translate(_ context.Context, req Request) (string, error)
 	return "T(" + req.Text + ")", nil
 }
 
-func TestLeakKeepsSourceAndDoesNotAbortTheRun(t *testing.T) {
+func TestLeakLeavesTheKeyOutSoTheNextRunRetriesIt(t *testing.T) {
 	src := mustLoad(t, `{"a":"Save","b":"Polish","c":"Cancel"}`)
 	p := leakyProvider{fail: map[string]bool{"Polish": true}}
 
@@ -118,8 +118,13 @@ func TestLeakKeepsSourceAndDoesNotAbortTheRun(t *testing.T) {
 	if err != nil {
 		t.Fatalf("one bad reply aborted the whole locale: %v", err)
 	}
-	if v, _ := out.Get("b"); v != "Polish" {
-		t.Errorf("source not kept for the rejected key: %v", v)
+	// Writing the source string here would look like a translation to every
+	// later run ("kept"), to any parity check, and to a reader of the file:
+	// the key would be in the source language forever. Left out, it is a gap —
+	// the app falls back exactly as it does for a key nobody has translated
+	// yet, and the next run tries again.
+	if v, ok := out.Get("b"); ok {
+		t.Errorf("rejected key written to the file as %q; it should be left out", v)
 	}
 	if v, _ := out.Get("a"); v != "T(Save)" {
 		t.Errorf("neighbouring keys should be unaffected: %v", v)
@@ -129,6 +134,18 @@ func TestLeakKeepsSourceAndDoesNotAbortTheRun(t *testing.T) {
 	}
 	if stats.Translated != 2 {
 		t.Errorf("Translated = %d, want 2 (the rejected one does not count)", stats.Translated)
+	}
+
+	// The next run, with a model that behaves, fills it in and keeps the rest.
+	again, stats, err := Translate(context.Background(), leakyProvider{}, src, out, "English", "Spanish", false, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v, _ := again.Get("b"); v != "T(Polish)" {
+		t.Errorf("the next run did not retry the rejected key: %v", v)
+	}
+	if stats.Kept != 2 || stats.Translated != 1 {
+		t.Errorf("next run: kept %d, translated %d; want 2 and 1", stats.Kept, stats.Translated)
 	}
 }
 

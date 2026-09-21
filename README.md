@@ -185,8 +185,9 @@ git add locales/*.json
   ("Preserve original filename") or a language name ("Polish"), a small model
   sometimes answers the prompt instead of translating it, replying with its own
   instructions. Such a reply is retried once with a blunter prompt; if it still
-  looks wrong the source string is kept and the run reports
-  `1 unusable reply`. An untranslated label is a small problem — a locale file
+  looks wrong the key is left out of the file — it stays missing, falls back
+  like any untranslated key, and is tried again on the next run — and the run
+  reports `1 unusable reply`. An untranslated label is a small problem — a locale file
   containing "Rules: output only the translation" is a much larger one.
 - **The key is sent as context.** The provider receives the full dotted path
   (`aichat_page.polish`, not the leaf `polish`), which helps a model pick the
@@ -223,7 +224,7 @@ main.go          CLI: flags, file discovery, orchestration, locale read/write
 
 main_test.go         ordering, cache, placeholders reaching the provider, concurrency
 placeholder_test.go  mask/restore round trips
-leak_test.go         markup masking, leak detection, keeping the source on a bad reply
+leak_test.go         markup masking, leak detection, leaving the key out on a bad reply
 loadlocale_test.go   BOM stripping, escape-free output, write/load round trip
 lang_test.go         locale code → language name resolution
 ```
