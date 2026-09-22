@@ -34,12 +34,12 @@ var literalElements = []string{"code", "kbd", "samp", "var", "pre"}
 // only its opening tag.
 var placeholderRe = regexp.MustCompile(`(?is)` + strings.Join(append(
 	literalElementPatterns(),
-	`</?[a-z][^<>]*>`,   // any other HTML/XML tag, attributes included
-	`</?\d+>`,           // i18next <Trans> numbered tags
-	`\{\{[^{}]*\}\}`,    // {{count}}
-	`\{[^{}]*\}`,        // {name}, {0}
-	`%\d+\$[a-z]`,       // %1$s
-	`%[a-z]`,            // %s, %d
+	`</?[a-z][^<>]*>`, // any other HTML/XML tag, attributes included
+	`</?\d+>`,         // i18next <Trans> numbered tags
+	`\{\{[^{}]*\}\}`,  // {{count}}
+	`\{[^{}]*\}`,      // {name}, {0}
+	`%\d+\$[a-z]`,     // %1$s
+	`%[a-z]`,          // %s, %d
 ), "|"))
 
 // literalElementPatterns builds one alternative per literal element. RE2 has no
