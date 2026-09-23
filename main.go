@@ -22,6 +22,7 @@ type options struct {
 	source      string
 	target      string
 	model       string
+	fallback    string
 	host        string
 	concurrency int
 	timeout     time.Duration
@@ -49,6 +50,7 @@ func run(args []string) error {
 	fs.StringVar(&opt.target, "t", "", "shorthand for --target")
 	fs.StringVar(&opt.model, "model", "translategemma", "Ollama model to use")
 	fs.StringVar(&opt.model, "m", "translategemma", "shorthand for --model")
+	fs.StringVar(&opt.fallback, "fallback-model", "", "second Ollama model, asked only for strings the first one answered instead of translating")
 	fs.StringVar(&opt.host, "host", defaultHost(), "Ollama base URL")
 	fs.IntVar(&opt.concurrency, "concurrency", 4, "number of concurrent translation requests")
 	fs.DurationVar(&opt.timeout, "timeout", 120*time.Second, "per-request timeout")
@@ -85,6 +87,11 @@ func run(args []string) error {
 	}
 
 	var provider Provider = NewOllamaProvider(opt.host, opt.model, opt.timeout)
+	var fallback *FallbackProvider
+	if opt.fallback != "" {
+		fallback = WithFallback(provider, NewOllamaProvider(opt.host, opt.fallback, opt.timeout))
+		provider = fallback
+	}
 	if opt.dryRun {
 		provider = dryRunProvider{}
 	}
@@ -99,6 +106,10 @@ func run(args []string) error {
 		}
 
 		lang := languageName(name)
+		var rescuedBefore int64
+		if fallback != nil {
+			rescuedBefore = fallback.Rescued()
+		}
 		out, stats, err := Translate(ctx, provider, src, existing, srcLang, lang, opt.noCache, opt.concurrency)
 		if err != nil {
 			return fmt.Errorf("translating %s: %w", name, err)
@@ -119,6 +130,11 @@ func run(args []string) error {
 				word = "reply"
 			}
 			note = fmt.Sprintf(", %d unusable %s", stats.Skipped, word)
+		}
+		if fallback != nil {
+			if rescued := fallback.Rescued() - rescuedBefore; rescued > 0 {
+				note += fmt.Sprintf(", %d via %s", rescued, opt.fallback)
+			}
 		}
 		fmt.Printf("%-7s %-22s %s  (translated %d, kept %d, copied %d%s)\n",
 			name, "→ "+lang, action, stats.Translated, stats.Kept, stats.Copied, note)

@@ -118,6 +118,7 @@ really has non-empty strings for those keys.
 | `-s, --source`       | —                        | Source locale name without extension, e.g. `en` (required)         |
 | `-t, --target`       | —                        | Target locale; if omitted, all other locales in `--dir` are done   |
 | `-m, --model`        | `translategemma`         | Ollama model to use                                                |
+| `--fallback-model`   | —                        | Second model, asked only for strings the first answered instead of translating |
 | `--host`             | `http://localhost:11434` | Ollama base URL (or set `OLLAMA_HOST`)                             |
 | `--concurrency`      | `4`                      | Concurrent translation requests                                    |
 | `--timeout`          | `120s`                   | Per-request timeout                                                |
@@ -189,6 +190,9 @@ git add locales/*.json
   like any untranslated key, and is tried again on the next run — and the run
   reports `1 unusable reply`. An untranslated label is a small problem — a locale file
   containing "Rules: output only the translation" is a much larger one.
+  Small models fail on different strings, so `--fallback-model qwen2.5:7b`
+  hands each refused string to a second model; only what both refuse is left
+  out, and the run reports `N via qwen2.5:7b`.
 - **The key is sent as context.** The provider receives the full dotted path
   (`aichat_page.polish`, not the leaf `polish`), which helps a model pick the
   right sense of an ambiguous word. It is a hint, not a guarantee:

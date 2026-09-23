@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -35,6 +36,41 @@ type Request struct {
 type Provider interface {
 	Translate(ctx context.Context, req Request) (string, error)
 	Name() string
+}
+
+// FallbackProvider asks a second model only for the strings the first one
+// answered instead of translating. Small models are inconsistent in different
+// ways: what translategemma reads as an instruction ("Draft a polite reply",
+// "{{count}} members"), a general model usually just translates. Every other
+// outcome passes through unchanged — a real error from either model is still
+// an error, and a leak from both is still a leak.
+type FallbackProvider struct {
+	first, second Provider
+	rescued       atomic.Int64
+}
+
+// WithFallback wraps first so that second is consulted on ErrLeaked.
+func WithFallback(first, second Provider) *FallbackProvider {
+	return &FallbackProvider{first: first, second: second}
+}
+
+func (f *FallbackProvider) Name() string { return f.first.Name() + ", then " + f.second.Name() }
+
+// Rescued is how many strings the second model answered after the first
+// refused — the number worth printing next to "unusable replies".
+func (f *FallbackProvider) Rescued() int64 { return f.rescued.Load() }
+
+func (f *FallbackProvider) Translate(ctx context.Context, req Request) (string, error) {
+	out, err := f.first.Translate(ctx, req)
+	if !errors.Is(err, ErrLeaked) {
+		return out, err
+	}
+	out, err = f.second.Translate(ctx, req)
+	if err != nil {
+		return "", err
+	}
+	f.rescued.Add(1)
+	return out, nil
 }
 
 // ErrLeaked means the model answered the prompt instead of translating it —
